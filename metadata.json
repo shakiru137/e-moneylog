@@ -1,0 +1,6 @@
+{
+  "name": "E-moneyLog",
+  "description": "AI-powered Naira cash book & financial assistant for Nigerian businesses and individuals with voice logging, speech correction, debt tracking, and bank SMS parsing.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
