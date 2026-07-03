@@ -69,6 +69,8 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   isBiometricsEnabled: true,
   isVoiceFeedbackEnabled: true,
   preferredLanguage: 'English',
+  hasPassword: true,
+  authProvider: 'email',
 };
 
 export const INITIAL_LOGS: LogEntry[] = [
@@ -206,3 +208,122 @@ export function speakText(text: string, language: string = 'en-NG') {
 
   window.speechSynthesis.speak(utterance);
 }
+
+// User Key Normalization Helper
+export function getUserKey(data?: Partial<UserProfile> | string | null): string {
+  if (!data) return 'usr_default';
+  if (typeof data === 'string') {
+    return data.trim().toLowerCase();
+  }
+  if (data.email && data.email.trim()) {
+    return data.email.trim().toLowerCase();
+  }
+  if (data.phone && data.phone.trim()) {
+    return data.phone.replace(/\D/g, '');
+  }
+  if (data.id && data.id.trim()) {
+    return data.id.trim().toLowerCase();
+  }
+  if (data.fullName && data.fullName.trim()) {
+    return data.fullName.trim().toLowerCase().replace(/\s+/g, '_');
+  }
+  return 'usr_default';
+}
+
+// Canvas-based Profile Photo Resizer/Compressor to guarantee localStorage & API fit
+export function compressImage(
+  file: File,
+  maxWidth = 300,
+  maxHeight = 300,
+  quality = 0.82
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onerror = () => resolve(event.target?.result as string);
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } else {
+          resolve(event.target?.result as string);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Sync user profile to server database API and localStorage
+export async function saveUserProfileToStore(userKey: string, profile: Partial<UserProfile>): Promise<void> {
+  const key = getUserKey(userKey || profile.email || profile.id);
+  if (!key) return;
+
+  // 1. LocalStorage save with try/catch
+  try {
+    localStorage.setItem(`emoneylog_user_${key}`, JSON.stringify(profile));
+    localStorage.setItem('emoneylog_user', JSON.stringify(profile));
+  } catch (e) {
+    console.warn('LocalStorage save warning:', e);
+  }
+
+  // 2. Server API sync
+  try {
+    await fetch('/api/user/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userKey: key, profile }),
+    });
+  } catch (err) {
+    console.warn('Server user profile API sync notice:', err);
+  }
+}
+
+// Retrieve user profile from server API or localStorage
+export async function fetchUserProfileFromStore(userKey: string): Promise<Partial<UserProfile> | null> {
+  const key = getUserKey(userKey);
+  if (!key) return null;
+
+  // 1. Try server endpoint
+  try {
+    const res = await fetch(`/api/user/profile?userKey=${encodeURIComponent(key)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.profile) {
+        return data.profile;
+      }
+    }
+  } catch {
+    // fallback
+  }
+
+  // 2. Try localStorage
+  try {
+    const saved = localStorage.getItem(`emoneylog_user_${key}`);
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // fallback
+  }
+  return null;
+}
+

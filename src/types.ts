@@ -1,5 +1,16 @@
 export type LedgerType = 'personal' | 'business' | 'joint';
 
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userEmail: string;
+  action: 'RECORD_RESET' | 'PASSWORD_CREATED' | 'PASSWORD_RESET' | 'PROFILE_UPDATE';
+  details: string;
+  ipAddress?: string;
+  verifiedOnServer: boolean;
+}
+
 export interface UserProfile {
   id: string;
   fullName: string;
@@ -14,6 +25,10 @@ export interface UserProfile {
   isBiometricsEnabled: boolean;
   isVoiceFeedbackEnabled: boolean;
   preferredLanguage: 'English' | 'Pidgin' | 'Yoruba' | 'Igbo' | 'Hausa';
+  hasPassword?: boolean;
+  passwordHash?: string;
+  authProvider?: 'email' | 'google' | 'apple' | 'microsoft';
+  auditLogs?: AuditLogEntry[];
 }
 
 export interface LogEntry {

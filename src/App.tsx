@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LogEntry, DebtEntry, UserProfile, LedgerType } from './types';
+import { LogEntry, DebtEntry, UserProfile, LedgerType, AuditLogEntry } from './types';
 import {
   INITIAL_USER_PROFILE,
   INITIAL_LOGS,
@@ -7,6 +7,9 @@ import {
   formatNaira,
   speakText,
   CATEGORIES,
+  getUserKey,
+  saveUserProfileToStore,
+  fetchUserProfileFromStore,
 } from './utils/formatters';
 import { Navbar } from './components/Navbar';
 import { VoiceLogModal } from './components/VoiceLogModal';
@@ -98,48 +101,113 @@ export default function App() {
   const [selectedType, setSelectedType] = useState<'all' | 'income' | 'expense'>('all');
 
   // User Authentication & Data Switcher
-  const handleLoginSuccess = (userData: Partial<UserProfile>) => {
-    const userKey = userData.email || userData.phone || (userData.fullName ? userData.fullName.toLowerCase().replace(/\s+/g, '_') : 'usr_default');
+  const handleUpdateUser = (updated: Partial<UserProfile>) => {
+    setUser((prev) => {
+      const updatedUser = { ...prev, ...updated };
+      const userKey = getUserKey(updatedUser);
+      try {
+        localStorage.setItem('emoneylog_user', JSON.stringify(updatedUser));
+        localStorage.setItem(`emoneylog_user_${userKey}`, JSON.stringify(updatedUser));
+      } catch (e) {
+        console.warn('LocalStorage error on user update:', e);
+      }
+      saveUserProfileToStore(userKey, updatedUser);
+      return updatedUser;
+    });
+  };
+
+  const handleLoginSuccess = async (userData: Partial<UserProfile>) => {
+    const userKey = getUserKey(userData);
+    const isDemoUser = userKey.includes('usr-nigeria-01') || userKey.includes('amina');
     
-    // 1. Build and set user profile
-    const savedProfile = localStorage.getItem(`emoneylog_user_${userKey}`);
-    const fullProfile: UserProfile = savedProfile ? JSON.parse(savedProfile) : {
+    // 1. Retrieve saved profile from LocalStorage or Server Store
+    let savedProfile: Partial<UserProfile> | null = null;
+    try {
+      const savedRaw = localStorage.getItem(`emoneylog_user_${userKey}`);
+      if (savedRaw) {
+        savedProfile = JSON.parse(savedRaw);
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
+      const remoteProfile = await fetchUserProfileFromStore(userKey);
+      if (remoteProfile) {
+        savedProfile = { ...(savedProfile || {}), ...remoteProfile };
+      }
+    } catch {
+      // ignore
+    }
+
+    const defaultAvatar = userData.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200';
+    const fullProfile: UserProfile = savedProfile ? {
+      ...INITIAL_USER_PROFILE,
+      ...savedProfile,
+      id: userKey,
+      fullName: savedProfile.fullName || userData.fullName || (userKey.includes('yusuf') ? 'Yusuf Shakiru' : 'Amina Babangida'),
+      email: savedProfile.email || userData.email || 'user@emoneylog.ng',
+      phone: savedProfile.phone || userData.phone || '',
+      businessName: savedProfile.businessName || userData.businessName || '',
+      avatarUrl: savedProfile.avatarUrl || defaultAvatar,
+      hasPassword: savedProfile.hasPassword ?? userData.hasPassword ?? true,
+      authProvider: savedProfile.authProvider || userData.authProvider || 'email',
+    } as UserProfile : {
       ...INITIAL_USER_PROFILE,
       id: userKey,
       fullName: userData.fullName || (userKey.includes('yusuf') ? 'Yusuf Shakiru' : 'Amina Babangida'),
-      email: userData.email || 'amina@emoneylog.ng',
-      phone: userData.phone || '08031234567',
-      businessName: userData.businessName || 'Amina Store',
-      avatarUrl: userData.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+      email: userData.email || 'user@emoneylog.ng',
+      phone: userData.phone || '',
+      businessName: userData.businessName || '',
+      avatarUrl: defaultAvatar,
+      hasPassword: userData.hasPassword ?? true,
+      authProvider: userData.authProvider || 'email',
     };
 
     setUser(fullProfile);
-    localStorage.setItem('emoneylog_user', JSON.stringify(fullProfile));
-    localStorage.setItem(`emoneylog_user_${userKey}`, JSON.stringify(fullProfile));
+    try {
+      localStorage.setItem('emoneylog_user', JSON.stringify(fullProfile));
+      localStorage.setItem(`emoneylog_user_${userKey}`, JSON.stringify(fullProfile));
+    } catch (e) {
+      console.warn('LocalStorage error on login:', e);
+    }
+    saveUserProfileToStore(userKey, fullProfile);
 
     // 2. Load user-specific isolated logs
     const savedUserLogs = localStorage.getItem(`emoneylog_logs_${userKey}`);
     let userLogs: LogEntry[] = [];
     if (savedUserLogs) {
       userLogs = JSON.parse(savedUserLogs);
-    } else {
+    } else if (isDemoUser) {
       userLogs = INITIAL_LOGS.map((l) => ({ ...l, userId: userKey }));
+    } else {
+      userLogs = [];
     }
     setLogs(userLogs);
-    localStorage.setItem('emoneylog_logs', JSON.stringify(userLogs));
-    localStorage.setItem(`emoneylog_logs_${userKey}`, JSON.stringify(userLogs));
+    try {
+      localStorage.setItem('emoneylog_logs', JSON.stringify(userLogs));
+      localStorage.setItem(`emoneylog_logs_${userKey}`, JSON.stringify(userLogs));
+    } catch (e) {
+      console.warn('LocalStorage error on logs:', e);
+    }
 
     // 3. Load user-specific isolated debts
     const savedUserDebts = localStorage.getItem(`emoneylog_debts_${userKey}`);
     let userDebts: DebtEntry[] = [];
     if (savedUserDebts) {
       userDebts = JSON.parse(savedUserDebts);
-    } else {
+    } else if (isDemoUser) {
       userDebts = INITIAL_DEBTS.map((d) => ({ ...d, userId: userKey }));
+    } else {
+      userDebts = [];
     }
     setDebts(userDebts);
-    localStorage.setItem('emoneylog_debts', JSON.stringify(userDebts));
-    localStorage.setItem(`emoneylog_debts_${userKey}`, JSON.stringify(userDebts));
+    try {
+      localStorage.setItem('emoneylog_debts', JSON.stringify(userDebts));
+      localStorage.setItem(`emoneylog_debts_${userKey}`, JSON.stringify(userDebts));
+    } catch (e) {
+      console.warn('LocalStorage error on debts:', e);
+    }
 
     setIsLoggedIn(true);
     localStorage.setItem('emoneylog_logged_in', 'true');
@@ -147,10 +215,32 @@ export default function App() {
     setIsAuthOpen(false);
   };
 
+  const handleResetAllRecords = (auditEntry?: AuditLogEntry) => {
+    const userKey = getUserKey(user);
+    setLogs([]);
+    setDebts([]);
+    localStorage.setItem('emoneylog_logs', JSON.stringify([]));
+    localStorage.setItem('emoneylog_debts', JSON.stringify([]));
+    if (userKey) {
+      localStorage.setItem(`emoneylog_logs_${userKey}`, JSON.stringify([]));
+      localStorage.setItem(`emoneylog_debts_${userKey}`, JSON.stringify([]));
+    }
+
+    if (auditEntry) {
+      const existingAudit = user.auditLogs || [];
+      const updatedAudit = [auditEntry, ...existingAudit];
+      const updatedUser = { ...user, auditLogs: updatedAudit };
+      setUser(updatedUser);
+      handleUpdateUser({ auditLogs: updatedAudit });
+    }
+  };
+
   const handleLogout = () => {
     setIsLoggedIn(false);
     localStorage.setItem('emoneylog_logged_in', 'false');
     localStorage.removeItem('emoneylog_active_user_key');
+    localStorage.removeItem('emoneylog_user');
+    setUser(INITIAL_USER_PROFILE);
     setIsProfileOpen(false);
     setIsVoiceModalOpen(false);
     setIsSMSModalOpen(false);
@@ -158,21 +248,24 @@ export default function App() {
     setIsVideoDemoOpen(false);
   };
 
-  // Save to LocalStorage for active user
+  // Save to LocalStorage and server store for active user
   useEffect(() => {
-    if (isLoggedIn) {
-      localStorage.setItem('emoneylog_user', JSON.stringify(user));
-      const userKey = user.email || user.phone || user.id;
-      if (userKey) {
+    if (isLoggedIn && user) {
+      const userKey = getUserKey(user);
+      try {
+        localStorage.setItem('emoneylog_user', JSON.stringify(user));
         localStorage.setItem(`emoneylog_user_${userKey}`, JSON.stringify(user));
+      } catch (e) {
+        console.warn('LocalStorage save failed in useEffect:', e);
       }
+      saveUserProfileToStore(userKey, user);
     }
   }, [user, isLoggedIn]);
 
   useEffect(() => {
     if (isLoggedIn) {
       localStorage.setItem('emoneylog_logs', JSON.stringify(logs));
-      const userKey = user.email || user.phone || user.id;
+      const userKey = getUserKey(user);
       if (userKey) {
         localStorage.setItem(`emoneylog_logs_${userKey}`, JSON.stringify(logs));
       }
@@ -182,7 +275,7 @@ export default function App() {
   useEffect(() => {
     if (isLoggedIn) {
       localStorage.setItem('emoneylog_debts', JSON.stringify(debts));
-      const userKey = user.email || user.phone || user.id;
+      const userKey = getUserKey(user);
       if (userKey) {
         localStorage.setItem(`emoneylog_debts_${userKey}`, JSON.stringify(debts));
       }
@@ -769,8 +862,9 @@ export default function App() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         user={user}
-        onUpdateUser={(updated) => setUser((prev) => ({ ...prev, ...updated }))}
+        onUpdateUser={handleUpdateUser}
         onLogout={handleLogout}
+        onResetAllRecords={handleResetAllRecords}
       />
 
       <AuthModal
