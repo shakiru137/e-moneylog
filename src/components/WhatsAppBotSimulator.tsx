@@ -109,9 +109,14 @@ export const WhatsAppBotSimulator: React.FC<WhatsAppBotSimulatorProps> = ({
             <p className="text-[11px] text-gray-400 font-mono">+234 812 E-MONEY</p>
           </div>
         </div>
-        <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded">
-          Live Simulator
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
+            Simulated Preview
+          </span>
+          <span className="px-2 py-0.5 text-[10px] font-bold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded">
+            Live Simulator
+          </span>
+        </div>
       </div>
 
       {/* WhatsApp Chat Body */}

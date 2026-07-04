@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { LogEntry, DebtEntry, UserProfile, LedgerType, AuditLogEntry } from './types';
 import {
   INITIAL_USER_PROFILE,
@@ -12,16 +12,17 @@ import {
   fetchUserProfileFromStore,
 } from './utils/formatters';
 import { Navbar } from './components/Navbar';
-import { VoiceLogModal } from './components/VoiceLogModal';
-import { SMSAutoLoggerModal } from './components/SMSAutoLoggerModal';
-import { AddLogModal } from './components/AddLogModal';
 import { DebtLedger } from './components/DebtLedger';
 import { WhatsAppBotSimulator } from './components/WhatsAppBotSimulator';
 import { AIAdvisorWidget } from './components/AIAdvisorWidget';
 import { ReportsExport } from './components/ReportsExport';
-import { ProfileModal } from './components/ProfileModal';
 import { AuthModal } from './components/AuthModal';
-import { VideoDemoModal } from './components/VideoDemoModal';
+
+const VoiceLogModal = lazy(() => import('./components/VoiceLogModal').then(m => ({ default: m.VoiceLogModal })));
+const SMSAutoLoggerModal = lazy(() => import('./components/SMSAutoLoggerModal').then(m => ({ default: m.SMSAutoLoggerModal })));
+const AddLogModal = lazy(() => import('./components/AddLogModal').then(m => ({ default: m.AddLogModal })));
+const ProfileModal = lazy(() => import('./components/ProfileModal').then(m => ({ default: m.ProfileModal })));
+const VideoDemoModal = lazy(() => import('./components/VideoDemoModal').then(m => ({ default: m.VideoDemoModal })));
 
 import {
   Wallet,
@@ -145,8 +146,8 @@ export default function App() {
       ...INITIAL_USER_PROFILE,
       ...savedProfile,
       id: userKey,
-      fullName: savedProfile.fullName || userData.fullName || (userKey.includes('yusuf') ? 'Yusuf Shakiru' : 'Amina Babangida'),
-      email: savedProfile.email || userData.email || 'user@emoneylog.ng',
+      fullName: savedProfile.fullName || userData.fullName || userKey.split('@')[0],
+      email: savedProfile.email || userData.email || userKey,
       phone: savedProfile.phone || userData.phone || '',
       businessName: savedProfile.businessName || userData.businessName || '',
       avatarUrl: savedProfile.avatarUrl || defaultAvatar,
@@ -155,8 +156,8 @@ export default function App() {
     } as UserProfile : {
       ...INITIAL_USER_PROFILE,
       id: userKey,
-      fullName: userData.fullName || (userKey.includes('yusuf') ? 'Yusuf Shakiru' : 'Amina Babangida'),
-      email: userData.email || 'user@emoneylog.ng',
+      fullName: userData.fullName || userKey.split('@')[0],
+      email: userData.email || userKey,
       phone: userData.phone || '',
       businessName: userData.businessName || '',
       avatarUrl: defaultAvatar,
@@ -836,49 +837,51 @@ export default function App() {
       </main>
 
       {/* ALL MODALS */}
-      <VoiceLogModal
-        isOpen={isVoiceModalOpen}
-        onClose={() => setIsVoiceModalOpen(false)}
-        activeLedger={activeLedger}
-        onAddLog={handleAddLog}
-        isVoiceFeedbackEnabled={user.isVoiceFeedbackEnabled}
-      />
+      <Suspense fallback={null}>
+        <VoiceLogModal
+          isOpen={isVoiceModalOpen}
+          onClose={() => setIsVoiceModalOpen(false)}
+          activeLedger={activeLedger}
+          onAddLog={handleAddLog}
+          isVoiceFeedbackEnabled={user.isVoiceFeedbackEnabled}
+        />
 
-      <SMSAutoLoggerModal
-        isOpen={isSMSModalOpen}
-        onClose={() => setIsSMSModalOpen(false)}
-        activeLedger={activeLedger}
-        onAddLog={handleAddLog}
-      />
+        <SMSAutoLoggerModal
+          isOpen={isSMSModalOpen}
+          onClose={() => setIsSMSModalOpen(false)}
+          activeLedger={activeLedger}
+          onAddLog={handleAddLog}
+        />
 
-      <AddLogModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        activeLedger={activeLedger}
-        onAddLog={handleAddLog}
-      />
+        <AddLogModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          activeLedger={activeLedger}
+          onAddLog={handleAddLog}
+        />
 
-      <ProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        user={user}
-        onUpdateUser={handleUpdateUser}
-        onLogout={handleLogout}
-        onResetAllRecords={handleResetAllRecords}
-      />
+        <ProfileModal
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          user={user}
+          onUpdateUser={handleUpdateUser}
+          onLogout={handleLogout}
+          onResetAllRecords={handleResetAllRecords}
+        />
+
+        <VideoDemoModal
+          isOpen={isVideoDemoOpen}
+          onClose={() => setIsVideoDemoOpen(false)}
+          onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+          onOpenSMSModal={() => setIsSMSModalOpen(true)}
+          onOpenAddModal={() => setIsAddModalOpen(true)}
+        />
+      </Suspense>
 
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         onLoginSuccess={handleLoginSuccess}
-      />
-
-      <VideoDemoModal
-        isOpen={isVideoDemoOpen}
-        onClose={() => setIsVideoDemoOpen(false)}
-        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
-        onOpenSMSModal={() => setIsSMSModalOpen(true)}
-        onOpenAddModal={() => setIsAddModalOpen(true)}
       />
 
     </div>

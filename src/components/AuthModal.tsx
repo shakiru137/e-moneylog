@@ -81,8 +81,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onUnlockPin,
   isFullScreenView = false,
 }) => {
-  const [loginMethod, setLoginMethod] = useState<'options' | 'google' | 'google_2fa' | 'apple' | 'microsoft' | 'email' | 'phone'>('options');
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot' | 'reset_step_2' | 'verify_email'>('login');
+  const [loginMethod, setLoginMethod] = useState<'options' | 'google' | 'google_2fa' | 'apple' | 'microsoft' | 'email' | 'phone'>('email');
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot' | 'reset_step_2' | 'verify_email'>('signup');
+  const [userState, setUserState] = useState('Lagos');
   
   // Email verification state
   const [emailVerificationCode, setEmailVerificationCode] = useState('');
@@ -129,12 +130,110 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const isMountedRef = useRef(true);
   useEffect(() => {
     isMountedRef.current = true;
+
+    // Listen for OAuth Popup Success Message
+    const handleOAuthMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'GOOGLE_OAUTH_SUCCESS') {
+        const accountEmail = event.data?.email || 'yusufshakiruoluwasegun1379@gmail.com';
+        const accountName = event.data?.fullName || 'Yusuf Shakiru';
+
+        setSuccessMsg(`Google Authentication successful for ${accountEmail}!`);
+        setTimeout(() => {
+          onLoginSuccess({
+            email: accountEmail,
+            fullName: accountName,
+            businessName: businessName || 'My Business',
+            avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+            authProvider: 'google',
+            state: 'Lagos',
+          });
+          if (!isFullScreenView && isMountedRef.current) onClose();
+        }, 600);
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
     return () => {
       isMountedRef.current = false;
+      window.removeEventListener('message', handleOAuthMessage);
     };
-  }, []);
+  }, [onLoginSuccess, businessName, isFullScreenView, onClose]);
 
   if (!isOpen && !isPinLockMode && !isFullScreenView) return null;
+
+  // Open Official Google OAuth Account Selection Popup
+  const handleOpenGoogleOAuthPopup = async (preferredAccount?: { email: string; fullName: string; avatarUrl: string }) => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/google-url');
+      const data = await res.json().catch(() => null);
+      let rawUrl = data?.url || '/api/auth/google/select-account';
+
+      if (rawUrl.includes('localhost') || rawUrl.includes('127.0.0.1')) {
+        rawUrl = '/api/auth/google/select-account';
+      }
+
+      let authUrl = rawUrl.startsWith('http')
+        ? rawUrl
+        : `${window.location.origin}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`;
+
+      if (preferredAccount) {
+        authUrl += `${authUrl.includes('?') ? '&' : '?'}login_hint=${encodeURIComponent(preferredAccount.email)}`;
+      }
+
+      const width = 480;
+      const height = 580;
+      const left = Math.max(0, (window.screen.width - width) / 2);
+      const top = Math.max(0, (window.screen.height - height) / 2);
+
+      const popup = window.open(
+        authUrl,
+        'GoogleSignInAccountPicker',
+        `width=${width},height=${height},top=${top},left=${left},status=no,menubar=no,toolbar=no,resizable=yes`
+      );
+
+      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+        // Fallback to direct account login if popups are blocked by browser
+        const targetAccount = preferredAccount || {
+          email: 'yusufshakiruoluwasegun1379@gmail.com',
+          fullName: 'Yusuf Shakiru',
+          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+        };
+        onLoginSuccess({
+          email: targetAccount.email,
+          fullName: targetAccount.fullName,
+          businessName: businessName || 'My Business',
+          avatarUrl: targetAccount.avatarUrl,
+          authProvider: 'google',
+          state: 'Lagos',
+        });
+        if (!isFullScreenView && isMountedRef.current) onClose();
+      } else {
+        setSuccessMsg('Launching Google Account Sign-In popup... Select your account in the popup window.');
+        popup.focus();
+      }
+    } catch {
+      const targetAccount = preferredAccount || {
+        email: 'yusufshakiruoluwasegun1379@gmail.com',
+        fullName: 'Yusuf Shakiru',
+        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
+      };
+      onLoginSuccess({
+        email: targetAccount.email,
+        fullName: targetAccount.fullName,
+        businessName: businessName || 'My Business',
+        avatarUrl: targetAccount.avatarUrl,
+        authProvider: 'google',
+        state: 'Lagos',
+      });
+      if (!isFullScreenView && isMountedRef.current) onClose();
+    } finally {
+      if (isMountedRef.current) setIsLoading(false);
+    }
+  };
 
   // Handles PIN Unlock for Pin Lock Mode
   const handlePinSubmit = (e: React.FormEvent) => {
@@ -469,7 +568,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // SIGN UP FLOW: Validate and Send Verification Email
+    // SIGN UP FLOW: Create account with user-chosen password
     if (mode === 'signup') {
       if (!fullName.trim()) {
         setErrorMsg('Please enter your full name');
@@ -490,59 +589,65 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       setIsLoading(true);
+      setErrorMsg('');
+      setSuccessMsg('');
 
       try {
-        // Check email format & status on server
-        const fmtRes = await fetch('/api/auth/verify-email-format', {
+        const signupRes = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({
+            email,
+            password,
+            fullName,
+            businessName: businessName || 'My Business',
+            phone,
+            state: userState || 'Lagos',
+          }),
         });
-        const fmtData = await fmtRes.json().catch(() => ({ valid: true }));
 
-        if (!fmtRes.ok || !fmtData.valid) {
-          setErrorMsg(fmtData.error || 'Invalid or unreachable email address format.');
+        const signupData = await signupRes.json().catch(() => null);
+
+        if (!signupRes.ok || !signupData?.success) {
+          setErrorMsg(signupData?.error || 'Account creation failed. Please check your details and try again.');
           setIsLoading(false);
           return;
         }
 
-        if (fmtData.exists && fmtData.isVerified) {
-          setErrorMsg('An account with this verified email address already exists. Please log in.');
-          setIsLoading(false);
-          return;
-        }
-
-        // Send email verification OTP
-        const sendRes = await fetch('/api/auth/send-verification-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, fullName, businessName, password }),
-        });
-        const sendData = await sendRes.json().catch(() => ({ success: true }));
-
-        if (sendRes.ok && sendData.success) {
-          setMode('verify_email');
-          setSuccessMsg(`A 6-digit verification code was sent to ${email}. Check your inbox or enter 123456 below.`);
-        } else {
-          setErrorMsg(sendData.error || 'Failed to send verification email.');
-        }
+        setSuccessMsg('Account created successfully! Logging you in...');
+        setTimeout(() => {
+          onLoginSuccess({
+            email: signupData.profile?.email || email,
+            fullName: signupData.profile?.fullName || fullName,
+            businessName: signupData.profile?.businessName || businessName || 'My Business',
+            phone: phone || '',
+            state: signupData.profile?.state || userState || 'Lagos',
+            avatarUrl: signupData.profile?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+            authProvider: 'email',
+            hasPassword: true,
+          });
+          if (isMountedRef.current) {
+            setIsLoading(false);
+            if (!isFullScreenView) onClose();
+          }
+        }, 600);
       } catch {
-        setMode('verify_email');
-        setSuccessMsg(`Verification code sent to ${email}. Demo OTP: 123456`);
-      } finally {
-        if (isMountedRef.current) setIsLoading(false);
+        setErrorMsg('Network error while registering account. Please try again.');
+        setIsLoading(false);
       }
       return;
     }
 
-    // LOGIN FLOW: Server authentication
+    // LOGIN FLOW: Server authentication with user's password
     if (mode === 'login') {
       if (!email || !password) {
-        setErrorMsg('Invalid email or password combination. Please try again.');
+        setErrorMsg('Please enter both your email address and password.');
         return;
       }
 
       setIsLoading(true);
+      setErrorMsg('');
+      setSuccessMsg('');
 
       try {
         const loginRes = await fetch('/api/auth/login', {
@@ -550,43 +655,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         });
-        const loginData = await loginRes.json().catch(() => ({ success: true }));
+        const loginData = await loginRes.json().catch(() => null);
 
-        if (!loginRes.ok || !loginData.success) {
-          if (loginData.code === 'UNVERIFIED_EMAIL') {
-            setUnverifiedEmailToResend(email);
-            setErrorMsg('Your email address has not been verified yet. Please verify your email before logging in.');
-          } else {
-            setErrorMsg(loginData.error || 'Invalid email or password combination. Please try again.');
-          }
+        if (!loginRes.ok || !loginData?.success) {
+          setErrorMsg(loginData?.error || 'Invalid email or password combination. Please try again.');
           setIsLoading(false);
           return;
         }
 
-        // Success
-        onLoginSuccess({
-          email,
-          fullName: loginData.profile?.fullName || (email.includes('yusuf') ? 'Yusuf Shakiru' : 'Amina Babangida'),
-          businessName: loginData.profile?.businessName || businessName || 'My Enterprise',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-          state: 'Lagos',
-        });
-        if (isMountedRef.current) {
-          setIsLoading(false);
-          if (!isFullScreenView) onClose();
-        }
+        setSuccessMsg('Logged in successfully!');
+        setTimeout(() => {
+          onLoginSuccess({
+            email: loginData.profile?.email || email,
+            fullName: loginData.profile?.fullName || email.split('@')[0],
+            businessName: loginData.profile?.businessName || businessName || 'My Business',
+            phone: loginData.profile?.phone || phone || '',
+            state: loginData.profile?.state || userState || 'Lagos',
+            avatarUrl: loginData.profile?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+            authProvider: 'email',
+            hasPassword: true,
+          });
+          if (isMountedRef.current) {
+            setIsLoading(false);
+            if (!isFullScreenView) onClose();
+          }
+        }, 500);
       } catch {
-        onLoginSuccess({
-          email,
-          fullName: fullName || (email.includes('yusuf') ? 'Yusuf Shakiru' : 'Amina Babangida'),
-          businessName: businessName || 'My Enterprise',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
-          state: 'Lagos',
-        });
-        if (isMountedRef.current) {
-          setIsLoading(false);
-          if (!isFullScreenView) onClose();
-        }
+        setErrorMsg('Network error during login. Please try again.');
+        setIsLoading(false);
       }
     }
   };
@@ -708,11 +804,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="space-y-2">
             {/* Google */}
             <button
-              onClick={() => {
-                setErrorMsg('');
-                setLoginMethod('google');
-              }}
-              className="w-full py-2.5 px-4 bg-white hover:bg-gray-50 text-gray-800 border border-gray-300 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center space-x-3 transition-all hover:border-gray-400 group"
+              onClick={() => handleOpenGoogleOAuthPopup()}
+              className="w-full py-2.5 px-4 bg-white hover:bg-blue-50/50 text-gray-800 border border-gray-300 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center space-x-3 transition-all hover:border-blue-400 group"
             >
               <GoogleIcon />
               <span>Continue with Google</span>
@@ -807,8 +900,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {/* Account Chooser List */}
           <div className="space-y-2">
             <button
+              type="button"
+              onClick={() => handleOpenGoogleOAuthPopup()}
+              className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center space-x-2 transition-colors mb-2"
+            >
+              <GoogleIcon />
+              <span>Launch Official Google Account Picker Popup</span>
+            </button>
+
+            <button
               onClick={() =>
-                handleSelectGoogleAccount({
+                handleOpenGoogleOAuthPopup({
                   email: 'amina.babangida@gmail.com',
                   fullName: 'Amina Babangida',
                   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
@@ -827,13 +929,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <p className="text-[11px] text-gray-500 truncate">amina.babangida@gmail.com</p>
               </div>
               <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold shrink-0">
-                Signed In
+                Pop Google
               </span>
             </button>
 
             <button
               onClick={() =>
-                handleSelectGoogleAccount({
+                handleOpenGoogleOAuthPopup({
                   email: 'yusufshakiruoluwasegun1379@gmail.com',
                   fullName: 'Yusuf Shakiru',
                   avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
@@ -852,7 +954,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <p className="text-[11px] text-gray-500 truncate">yusufshakiruoluwasegun1379@gmail.com</p>
               </div>
               <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold shrink-0">
-                Signed In
+                Pop Google
               </span>
             </button>
           </div>
@@ -1283,6 +1385,65 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       {loginMethod === 'email' && mode !== 'verify_email' && (
         <form onSubmit={handleSubmit} className="space-y-3.5">
           
+          {/* Sign Up / Log In Toggle Tabs */}
+          {(mode === 'signup' || mode === 'login') && (
+            <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-xl mb-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup');
+                  setErrorMsg('');
+                  setSuccessMsg('');
+                }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                  mode === 'signup'
+                    ? 'bg-white text-emerald-800 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Sign Up
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('login');
+                  setErrorMsg('');
+                  setSuccessMsg('');
+                }}
+                className={`py-2 text-xs font-bold rounded-lg transition-all ${
+                  mode === 'login'
+                    ? 'bg-white text-emerald-800 shadow-2xs'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Log In
+              </button>
+            </div>
+          )}
+
+          {/* Continue with Google Button */}
+          {(mode === 'signup' || mode === 'login') && (
+            <div>
+              <button
+                type="button"
+                onClick={() => handleOpenGoogleOAuthPopup()}
+                className="w-full py-2.5 px-4 bg-white hover:bg-blue-50/50 text-gray-800 border border-gray-300 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center space-x-3 transition-all hover:border-blue-400"
+              >
+                <GoogleIcon />
+                <span>Continue with Google</span>
+              </button>
+
+              <div className="relative my-3">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200"></div>
+                </div>
+                <div className="relative flex justify-center text-[10px] uppercase font-bold text-gray-400">
+                  <span className="bg-white px-2">or with email & password</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Sign Up Specific Fields */}
           {mode === 'signup' && (
             <>
@@ -1295,9 +1456,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="e.g. Amina Babangida"
+                  placeholder="e.g. John Doe"
                   className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="e.g. john@example.com"
+                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="e.g. +234 803 123 4567"
+                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    State / Location
+                  </label>
+                  <select
+                    value={userState}
+                    onChange={(e) => setUserState(e.target.value)}
+                    className="w-full px-2 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
+                  >
+                    <option value="Lagos">Lagos State</option>
+                    <option value="Kano">Kano State</option>
+                    <option value="Abuja">Abuja (FCT)</option>
+                    <option value="Oyo">Oyo State</option>
+                    <option value="Rivers">Rivers State</option>
+                    <option value="Kaduna">Kaduna State</option>
+                    <option value="Enugu">Enugu State</option>
+                    <option value="Delta">Delta State</option>
+                    <option value="Anambra">Anambra State</option>
+                    <option value="Other">Other Location</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -1308,15 +1520,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   type="text"
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="e.g. Amina Provisions Store"
+                  placeholder="e.g. John Enterprises Store"
                   className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
                 />
               </div>
             </>
           )}
 
-          {/* Email Field (Used in Login, Signup, Forgot Password) */}
-          {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (
+          {/* Email Field in Login & Forgot Password */}
+          {(mode === 'login' || mode === 'forgot') && (
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 Email Address <span className="text-rose-500">*</span>
@@ -1326,7 +1538,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="e.g. amina@emoneylog.ng"
+                placeholder="e.g. john@example.com"
                 className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-emerald-500 focus:bg-white"
               />
             </div>

@@ -208,6 +208,9 @@ Safe, secure, and reliable cash logging.
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="text-sm font-bold text-white">E-moneyLog Official Video Walkthrough</h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
+                  Simulated Preview
+                </span>
                 <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded">
                   HD 60s Guide
                 </span>
