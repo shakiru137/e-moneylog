@@ -56,11 +56,11 @@ export const SAMPLE_SMS_PRESETS: BankSMSPreset[] = [
 ];
 
 export const INITIAL_USER_PROFILE: UserProfile = {
-  id: '',
-  fullName: '',
-  email: '',
-  phone: '',
-  businessName: '',
+  id: 'usr-default-01',
+  fullName: 'Amina Babangida',
+  email: 'amina.b@emoneylog.ng',
+  phone: '+234 803 456 7890',
+  businessName: 'Amina Enterprise & Retail Store',
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
   state: 'Lagos',
   city: 'Ikeja',
@@ -69,7 +69,7 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   isBiometricsEnabled: false,
   isVoiceFeedbackEnabled: true,
   preferredLanguage: 'English',
-  hasPassword: false,
+  hasPassword: true,
   authProvider: 'email',
 };
 

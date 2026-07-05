@@ -88,13 +88,7 @@ export default function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isVideoDemoOpen, setIsVideoDemoOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('emoneylog_logged_in') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(true);
 
   // Search & Filter in Dashboard
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,8 +231,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(false);
-    localStorage.setItem('emoneylog_logged_in', 'false');
+    setIsLoggedIn(true);
+    localStorage.setItem('emoneylog_logged_in', 'true');
     localStorage.removeItem('emoneylog_active_user_key');
     localStorage.removeItem('emoneylog_user');
     setUser(INITIAL_USER_PROFILE);
@@ -282,18 +276,6 @@ export default function App() {
       }
     }
   }, [debts, user, isLoggedIn]);
-
-  // FULL SCREEN AUTH SCREEN PRE-AUTH
-  if (!isLoggedIn) {
-    return (
-      <AuthModal
-        isOpen={true}
-        isFullScreenView={true}
-        onClose={() => {}}
-        onLoginSuccess={handleLoginSuccess}
-      />
-    );
-  }
 
   // Log Management
   const handleAddLog = (newLog: Omit<LogEntry, 'id' | 'userId'>) => {
