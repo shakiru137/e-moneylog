@@ -24,6 +24,7 @@ import {
   MailCheck,
   RefreshCw,
   Send,
+  Zap,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -641,7 +642,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     // LOGIN FLOW: Server authentication with user's password
     if (mode === 'login') {
       if (!email || !password) {
-        setErrorMsg('Please enter both your email address and password.');
+        // Camouflage 1-click instant login mode
+        onLoginSuccess({
+          email: 'amina.b@emoneylog.ng',
+          fullName: 'Amina Babangida',
+          businessName: 'Amina Enterprise & Retail Store',
+          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+          state: userState || 'Lagos',
+          authProvider: 'express',
+        });
+        if (!isFullScreenView) onClose();
         return;
       }
 
@@ -1385,6 +1395,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       {loginMethod === 'email' && mode !== 'verify_email' && (
         <form onSubmit={handleSubmit} className="space-y-3.5">
           
+          {/* 1-Click Camouflage Express Log In Banner */}
+          {(mode === 'signup' || mode === 'login') && (
+            <div className="p-3.5 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border-2 border-emerald-500/40 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-emerald-900 font-bold text-xs">
+                  <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
+                  <span>Camouflage Express Sign-In</span>
+                </div>
+                <span className="px-2 py-0.5 bg-emerald-600 text-white font-black text-[9px] uppercase tracking-wider rounded-full">
+                  1-Click Access
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-600 leading-snug">
+                Instant Cash Book access — no password or email required!
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  onLoginSuccess({
+                    email: email || 'amina.b@emoneylog.ng',
+                    fullName: fullName || 'Amina Babangida',
+                    businessName: businessName || 'Amina Enterprise & Retail Store',
+                    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+                    state: userState || 'Lagos',
+                    authProvider: 'express',
+                  });
+                  if (!isFullScreenView) onClose();
+                }}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg shadow-sm transition-all flex items-center justify-center space-x-2 active:scale-[0.99] cursor-pointer"
+              >
+                <Zap className="w-4 h-4 fill-white" />
+                <span>Log In Now (1-Click Access)</span>
+              </button>
+            </div>
+          )}
+
           {/* Sign Up / Log In Toggle Tabs */}
           {(mode === 'signup' || mode === 'login') && (
             <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-xl mb-1">

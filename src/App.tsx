@@ -17,6 +17,8 @@ import { WhatsAppBotSimulator } from './components/WhatsAppBotSimulator';
 import { AIAdvisorWidget } from './components/AIAdvisorWidget';
 import { ReportsExport } from './components/ReportsExport';
 import { AuthModal } from './components/AuthModal';
+import { FloatingCalculator } from './components/FloatingCalculator';
+import { OfflineSyncBadge } from './components/OfflineSyncBadge';
 
 const VoiceLogModal = lazy(() => import('./components/VoiceLogModal').then(m => ({ default: m.VoiceLogModal })));
 const SMSAutoLoggerModal = lazy(() => import('./components/SMSAutoLoggerModal').then(m => ({ default: m.SMSAutoLoggerModal })));
@@ -46,6 +48,9 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Play,
+  Eye,
+  EyeOff,
+  Calendar,
 } from 'lucide-react';
 
 export default function App() {
@@ -94,6 +99,10 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [selectedType, setSelectedType] = useState<'all' | 'income' | 'expense'>('all');
+
+  // Live Metrics & Privacy Controls
+  const [timeframeFilter, setTimeframeFilter] = useState<'all' | 'today'>('all');
+  const [isPrivacyMode, setIsPrivacyMode] = useState<boolean>(false);
 
   // User Authentication & Data Switcher
   const handleUpdateUser = (updated: Partial<UserProfile>) => {
@@ -231,8 +240,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    setIsLoggedIn(true);
-    localStorage.setItem('emoneylog_logged_in', 'true');
+    setIsLoggedIn(false);
+    localStorage.setItem('emoneylog_logged_in', 'false');
     localStorage.removeItem('emoneylog_active_user_key');
     localStorage.removeItem('emoneylog_user');
     setUser(INITIAL_USER_PROFILE);
@@ -241,6 +250,7 @@ export default function App() {
     setIsSMSModalOpen(false);
     setIsAddModalOpen(false);
     setIsVideoDemoOpen(false);
+    setIsAuthOpen(true);
   };
 
   // Save to LocalStorage and server store for active user
@@ -322,14 +332,22 @@ export default function App() {
     setDebts((prev) => prev.filter((d) => d.id !== id));
   };
 
-  // Calculations for Active Ledger
+  // Calculations for Active Ledger & Timeframe Filter
   const currentLogs = logs.filter((l) => l.ledgerType === activeLedger);
+  const todayDateStr = new Date().toISOString().split('T')[0];
 
-  const totalCashIn = currentLogs
+  const timeframeLogs = currentLogs.filter((l) => {
+    if (timeframeFilter === 'today') {
+      return l.date === todayDateStr;
+    }
+    return true;
+  });
+
+  const totalCashIn = timeframeLogs
     .filter((l) => l.type === 'income')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
-  const totalCashOut = currentLogs
+  const totalCashOut = timeframeLogs
     .filter((l) => l.type === 'expense')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
@@ -338,6 +356,14 @@ export default function App() {
   const totalDebtsOwedToMe = debts
     .filter((d) => d.ledgerType === activeLedger && d.type === 'debtor' && d.status !== 'paid')
     .reduce((acc, curr) => acc + (curr.amount - curr.paidAmount), 0);
+
+  // Helper function to render amount with privacy mode masking
+  const renderMoney = (amount: number) => {
+    if (isPrivacyMode) {
+      return '₦ ••••••';
+    }
+    return formatNaira(amount);
+  };
 
   // Filtered Logs
   const filteredLogs = currentLogs.filter((log) => {
@@ -477,6 +503,60 @@ export default function App() {
               </button>
             </div>
 
+            {/* Live Metrics & Privacy Controls Bar */}
+            <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+              
+              {/* Timeframe Filter Buttons */}
+              <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg w-full sm:w-auto">
+                <button
+                  onClick={() => setTimeframeFilter('all')}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    timeframeFilter === 'all'
+                      ? 'bg-white text-emerald-800 shadow-2xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>All Records (Full History)</span>
+                </button>
+                <button
+                  onClick={() => setTimeframeFilter('today')}
+                  className={`flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    timeframeFilter === 'today'
+                      ? 'bg-white text-emerald-800 shadow-2xs'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Today's Records Only</span>
+                </button>
+              </div>
+
+              {/* Privacy Mode Eye Toggle */}
+              <button
+                onClick={() => setIsPrivacyMode(!isPrivacyMode)}
+                className={`w-full sm:w-auto px-3.5 py-1.5 rounded-lg border text-xs font-bold flex items-center justify-center space-x-2 transition-all cursor-pointer ${
+                  isPrivacyMode
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                    : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                }`}
+                title="Toggle Privacy Mode (Hide/Show amounts)"
+              >
+                {isPrivacyMode ? (
+                  <>
+                    <EyeOff className="w-4 h-4 text-amber-600" />
+                    <span>Privacy Mode: ON (Amounts Hidden)</span>
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4 text-emerald-600" />
+                    <span>Privacy Mode: OFF (Amounts Visible)</span>
+                  </>
+                )}
+              </button>
+
+            </div>
+
             {/* Cash Summary Cards Banner (High Density Style) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
@@ -487,7 +567,7 @@ export default function App() {
                   <Wallet className="w-4 h-4 text-emerald-600" />
                 </div>
                 <h3 className={`text-2xl sm:text-3xl font-black ${currentBalance >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
-                  {formatNaira(currentBalance)}
+                  {renderMoney(currentBalance)}
                 </h3>
                 <p className="text-[11px] text-emerald-600 mt-2 font-medium flex items-center space-x-1">
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -502,10 +582,10 @@ export default function App() {
                   <ArrowUpRight className="w-4 h-4" />
                 </div>
                 <h3 className="text-2xl font-black text-gray-900">
-                  {formatNaira(totalCashIn)}
+                  {renderMoney(totalCashIn)}
                 </h3>
                 <p className="text-[11px] text-gray-500 mt-2">
-                  {currentLogs.filter((l) => l.type === 'income').length} income transaction(s)
+                  {timeframeLogs.filter((l) => l.type === 'income').length} income transaction(s)
                 </p>
               </div>
 
@@ -516,10 +596,10 @@ export default function App() {
                   <ArrowDownLeft className="w-4 h-4" />
                 </div>
                 <h3 className="text-2xl font-black text-gray-900">
-                  {formatNaira(totalCashOut)}
+                  {renderMoney(totalCashOut)}
                 </h3>
                 <p className="text-[11px] text-gray-500 mt-2">
-                  {currentLogs.filter((l) => l.type === 'expense').length} expense transaction(s)
+                  {timeframeLogs.filter((l) => l.type === 'expense').length} expense transaction(s)
                 </p>
               </div>
 
@@ -530,7 +610,7 @@ export default function App() {
                   <UserCheck className="w-4 h-4" />
                 </div>
                 <h3 className="text-2xl font-black text-gray-900">
-                  {formatNaira(totalDebtsOwedToMe)}
+                  {renderMoney(totalDebtsOwedToMe)}
                 </h3>
                 <button
                   onClick={() => setActiveMainTab('debts')}
@@ -865,6 +945,10 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         onLoginSuccess={handleLoginSuccess}
       />
+
+      {/* Floating Calculator Overlay & Offline Sync Status Badges */}
+      <FloatingCalculator />
+      <OfflineSyncBadge />
 
     </div>
   );
